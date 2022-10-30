@@ -7,8 +7,7 @@
 
 # install / load required R packages --------------------------------------
 
-library(tidyverse) # readr::read_csv
-library(dplyr) # for data frame manipulation and grouping statistics
+library(tidyverse) # includes packages such as readr, dplyr, tidyr
 
 # User-defined inputs -----------------------------------------------------
 
@@ -73,12 +72,15 @@ for(y in seq(2000, 2022)){
 
 # Calculate season statistics for each year and variable ---------------
 
-# separate the date of each row into columns for year, month, and day
+# separate the date of each row into columns for year, month, and day.
 df_stats <- df %>%
   dplyr::mutate(date_copy = date) %>%
-  tidyr::separate(col = date_copy, into = c("year", "month", "day"), sep = "-")
+  tidyr::separate(col = date_copy, into = c("year", "month", "day"),
+                  sep = "-") %>%
+  # remove rows with NA values in season_number column
+  dplyr::filter(!is.na(season_number))
 
-# add a column for the starting year and month within each season
+# add a column for the starting year and month within each season.
 df_stats <- df_stats %>%
   dplyr::group_by(season_number) %>%
   dplyr::mutate(season_start_year = min(year))
@@ -88,8 +90,10 @@ df_stats <- df_stats %>%
 n_seasons <- length(unique(df_stats$season_number))
 season_stats <- df_stats %>%
   dplyr::group_by(season_number, year = season_start_year) %>%
-  dplyr::summarise(precip = sum(precipitation.amount),
-                   minT = mean(temperatures.min.amount),
-                   maxT = mean(temperatures.max.amount),
-                   #ppet = mean(ppet.amount)
+  dplyr::summarise(precip = max(totalPrecipitationAccumulation),
+                   minT = mean(temperatureMin),
+                   maxT = mean(temperatureMax)
+                   #,ppet = mean(ppet.amount)
                    )
+
+
