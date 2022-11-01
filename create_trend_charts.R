@@ -219,6 +219,6 @@ for(weather_var in c("precip", "minT", "maxT"
 
 # write current stats to table (.csv file)
 write.csv(x = season_stats,
-          file = paste0(paste0("outputs/", "season_stats_",  place_name, "_",
+          file = paste0(paste0("outputs/", place_name, "_","season_stats_",
                                stringr::str_replace_all(season_name, " ", ""),
                                "_",lat, "_",lon, ".csv")))
