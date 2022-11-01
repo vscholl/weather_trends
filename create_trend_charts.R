@@ -15,11 +15,19 @@ library(tidyverse) # includes packages such as readr, dplyr, tidyr
 # Specify the file (.csv) containing weather data.
 data_filename <- "data/Kitui_-1.21_38.12_daily.csv"
 
+# Specify the place name, latitide, and longitude coordinates
+lat <- "-1.21"
+lon <- "38.12"
+place_name <- "Kitui, Kenya"
+
 # Specify the "season" or time period of interest using start/end date "MM-DD"
 # and give the time period a name.
 monthday_start <- "10-15"
 monthday_end <- "11-15"
 season_name <- "15 October - 15 November"
+
+# Add regression line to charts: TRUE or FALSE
+add_regression_line <- TRUE
 
 
 # --------------------------------------------------------------------------
@@ -96,7 +104,107 @@ season_stats <- df_stats %>%
                    # mean temperature extremes between the two dates
                    minT = mean(temperatureMin),
                    maxT = mean(temperatureMax)
-                   #,ppet = mean(ppet.amount)
+                   #,ppet = mean(ppet.amount) # VS TO DO WHEN P/PET DATA ARE AVAILABLE
                    )
 
+# Create charts to show season statistics --------------------------------
+
+# set the appropriate weather variable title and units
+for(weather_var in c("precip", "minT", "maxT"
+                     #, "ppet" # VS TO DO WHEN P/PET DATA ARE AVAILABLE
+                     )){
+
+  if(weather_var == "precip"){
+    var_title <- "precipitation"
+    var_units <- "[mm]"
+  } else if(weather_var == "minT"){
+    var_title <- "minimum tteperature"
+    var_units <- "[deg C]"
+  } else if(weather_var == "maxT"){
+    var_title <- "maximum teperature"
+    var_units <- "[deg C]"
+  } else if(weather_var == "ppet"){
+    var_title <- "P/PET"
+    var_units <- ""
+  }
+
+  # calculate mean, standard deviation, CV, P-value for current weather var
+  var_values <- as.data.frame(season_stats[, as.character(weather_var)])
+
+  # print status message to the console
+  print(paste0("Creating ", var_title, " chart..."))
+
+  # start creating the current chart
+  current_chart <- season_stats %>%
+    ggplot2::ggplot(aes(x = year,
+                        y = get(weather_var),
+                        group = 1)) +
+
+    # display a point for each season statistic
+    ggplot2::geom_point() +
+
+    # connect the data points with a line
+    ggplot2::geom_line(linetype = "solid") +
+
+    # clean plot theme with white background
+    ggplot2::theme_bw() +
+
+    # set the font size and rotation of axis labels.
+    # place the legend on the bottom of the chart.
+    theme(axis.text.x = element_text(size = 14, angle=45, hjust=1),
+          axis.title.x = element_text(size = 14),
+          axis.text.y = element_text(size = 14, hjust=1),
+          axis.title.y = element_text(size = 14),
+          plot.title = element_text(size = 16),
+          plot.subtitle = element_text(size = 14))
+
+  # Optionally add linear regression line
+  if(add_regression_line == TRUE){
+
+    # Calculate a linear model to estimate precipitation as a function of year
+    var_lm <- lm(get(weather_var)~as.numeric(year), season_stats)
+
+    # Print a summary of the linear regression coefficients and other metrics
+    summary(var_lm)
+
+    # Extract P-values of the linear regression
+    var_lm_P_values <- coefficients(summary(var_lm))[,4]
+    # Extract T-test values of the linear regression
+    var_lm_t_values <- coefficients(summary(var_lm))[,3]
+
+    # Add linear regression line to the chart
+    current_chart <- current_chart +
+      ggplot2::geom_smooth(method = "lm", se = FALSE,
+                           color = "black", linetype = "dashed")
+  }
+
+  # format the title, subtitle, and axis labels
+  current_chart <- current_chart +
+    ggplot2::labs(x = "year",
+                  y = paste("seasonal", var_title, var_units, "\n"),
+
+
+                  #title = paste0("Annual ", var_title, " variability for ",
+                    #            season_name, ", ", place_name, " (", lat, ", ", lon, ")"),
+
+                  title = paste0("Annual ", var_title, " variability in ",
+                                 place_name, " (", lat, ", ", lon, ")",
+                                 " during season: ", season_name),
+
+                  subtitle = paste0("mean ", var_title, " = ",
+                                   round((mean(var_values[,1])),2),
+                                   ", CV = ",
+                                   round(((sd(var_values[,1])) /
+                                            (mean(var_values[,1]))*100),0),
+                                   "%, SD = ", round((sd(var_values[,1])),2),
+                                   ", P-value = ", round(var_lm_P_values[[2]], digits = 3)))
+
+  # display the chart
+  current_chart
+
+  # write chart to image file
+
+
+
+} # end chart creation loop over weather variables
 
