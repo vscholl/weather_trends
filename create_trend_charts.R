@@ -90,7 +90,9 @@ df_stats <- df_stats %>%
 n_seasons <- length(unique(df_stats$season_number))
 season_stats <- df_stats %>%
   dplyr::group_by(season_number, year = season_start_year) %>%
-  dplyr::summarise(precip = max(totalPrecipitationAccumulation),
+                   # sum the rainfall values between the two dates
+  dplyr::summarise(precip = sum(totalPrecipitationAccumulation),
+                   # mean temperature extremes between the two dates
                    minT = mean(temperatureMin),
                    maxT = mean(temperatureMax)
                    #,ppet = mean(ppet.amount)
