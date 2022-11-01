@@ -32,6 +32,10 @@ add_regression_line <- TRUE
 
 # --------------------------------------------------------------------------
 
+# create output directory if it does not already exist
+if(!exists("outputs")){
+  dir.create("outputs")}
+
 # read data file (.csv) into a tibble.
  df <- readr::read_csv(data_filename)
 
@@ -200,10 +204,15 @@ for(weather_var in c("precip", "minT", "maxT"
                                    ", P-value = ", round(var_lm_P_values[[2]], digits = 3)))
 
   # display the chart
-  current_chart
+  #current_chart
 
-  # write chart to image file
-
+  # write current chart to image file
+  ggplot2::ggsave(filename = paste0("outputs/", place_name, "_seasonal_",
+                                    weather_var,"_chart_",
+                                    stringr::str_replace_all(season_name, " ", ""),
+                                    "_",lat, "_",lon, ".png"),
+                  plot = current_chart,
+                  width = 12.0, height = 6, units = "in", device = "png")
 
 
 } # end chart creation loop over weather variables
