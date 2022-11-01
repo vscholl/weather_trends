@@ -217,3 +217,8 @@ for(weather_var in c("precip", "minT", "maxT"
 
 } # end chart creation loop over weather variables
 
+# write current stats to table (.csv file)
+write.csv(x = season_stats,
+          file = paste0(paste0("outputs/", "season_stats_",  place_name, "_",
+                               stringr::str_replace_all(season_name, " ", ""),
+                               "_",lat, "_",lon, ".csv")))
