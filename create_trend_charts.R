@@ -9,6 +9,7 @@
 
 library(tidyverse) # includes packages such as readr, dplyr, tidyr
 
+
 # User-defined inputs -----------------------------------------------------
 
 # Specify the file (.csv) containing weather data.
@@ -16,9 +17,9 @@ data_filename <- "data/Kitui_-1.21_38.12_daily.csv"
 
 # Specify the "season" or time period of interest using start/end date "MM-DD"
 # and give the time period a name.
-monthday_start <- "03-15"
-monthday_end <- "10-01"
-season_name <- "15 March - 01 October"
+monthday_start <- "10-15"
+monthday_end <- "11-15"
+season_name <- "15 October - 15 November"
 
 
 # --------------------------------------------------------------------------
