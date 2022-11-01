@@ -3,3 +3,4 @@ awhere/*
 .Rproj.user
 .here
 *.Rproj
+outputs/*
