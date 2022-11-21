@@ -53,7 +53,10 @@ chart.title <- paste0("Weekly Climate Chart for ", place_name, "\n      Latitude
                       , "       ", days[1], " to ", days[2])
 
 
-# Calculate LTN for precip
+# aggregate over period of 7 days (weekly)
+
+
+# Calculate long term normal precip and add column labeled LTN
 
 
 # Subset the period of time the user wants charted to make an accumulation of "current time"
@@ -62,3 +65,47 @@ chart.title <- paste0("Weekly Climate Chart for ", place_name, "\n      Latitude
 # Create weekly precipitation chart
 
 
+
+
+
+# another approach: mimic the function here -------------------------------
+
+# Modify the code within the aWhere function to expect the column provided
+# in the TomorrowNow data set
+
+# attempting to mimic function with relevant variables
+generateClimateChart <- function(data
+                                ,variable
+                                ,variable_rightAxis = NULL
+                                ,day_start = NULL
+                                ,day_end = NULL
+                                ,title = NULL
+                                ,e_precip = FALSE
+                                ,e_threshold = 35
+                                ,doRoll = FALSE
+                                ,rolling_window = 30
+                                ,includeSTD = FALSE
+                                ,mainGraphType = 'line'
+                                ,daysToAggregateOver = NULL
+                                ,yAxisLimits = NA
+                                ,size_font_main_title = 16
+                                ,size_font_axis_titles = 14
+                                ,size_font_axis_labels = 12
+                                ,size_font_legend_entries = 12
+                                ,line_width = 1
+                                ,annotationsWhichSide = 'left') {
+
+
+  # because we are going to change the datastructure and it is a data.table we
+  # will explicitly copy what is passed in so it doesn't violate user's scoping
+  # expectations
+  dataToUse <- data.table::as.data.table(copy(data))
+
+
+}
+
+weekly_chart_test <- generateClimateChart(data = weather.df,
+                                       variable = "precipitation",
+                                       title = chart.title,
+                                       daysToAggregateOver = 7,
+                                       mainGraphType = 'bar')
