@@ -15,7 +15,7 @@ library(tidyverse) # includes packages such as readr, dplyr, tidyr
 # Specify the file (.csv) containing weather data.
 data_filename <- "data/Kitui_-1.21_38.12_daily.csv"
 
-# Specify the place name, latitide, and longitude coordinates
+# Specify the place name, latitude, and longitude coordinates
 lat <- "-1.21"
 lon <- "38.12"
 place_name <- "Kitui, Kenya"
