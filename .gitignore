@@ -4,3 +4,4 @@ awhere/*
 .here
 *.Rproj
 outputs/*
+.Rhistory
