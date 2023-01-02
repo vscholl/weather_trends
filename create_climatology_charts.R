@@ -2,7 +2,12 @@
 
 # This script reads a weather data file (.csv) and outputs a
 # climatology chart visualizing current and long-term normal
-# weekly rainfall.
+# weekly climate variables:
+
+# Left y-axis: rainfall (mm)
+#   Current precip illustrated by bars
+#   Long-term normal precip illustrated by line
+# x-axis: date (Month labels) during timeframe of interest
 
 
 # install / load required R packages --------------------------------------
@@ -54,6 +59,7 @@ chart.title <- paste0("Weekly Climate Chart for ", place_name, "\n      Latitude
 
 
 # aggregate over period of 7 days (weekly)
+daysToAggregateOver <- 7
 
 
 # Calculate long term normal precip and add column labeled LTN
@@ -62,7 +68,7 @@ chart.title <- paste0("Weekly Climate Chart for ", place_name, "\n      Latitude
 # Subset the period of time the user wants charted to make an accumulation of "current time"
 
 
-# Create weekly precipitation chart
+# Create weekly precipitation chart with current precip as bars and LTN precip as line
 
 
 
