@@ -118,6 +118,14 @@ chart <- dataToUse %>%
 # Calculate long term normal precip and add column labeled LTN
 
 
+
+
+
+
+
+
+
+
 # add LTN precip data to climate chart as line
 
 
