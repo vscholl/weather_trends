@@ -10,9 +10,16 @@
 # x-axis: date (Month labels) during timeframe of interest
 
 
+# This code is based on / incorporates the Create aWhere Chart function,
+# code here on GitHub:
+#  https://github.com/aWhereAPI/aWhere-R-Charts/blob/dev/R/generateaWhereChart.R
+
 # install / load required R packages --------------------------------------
 
 library(tidyverse) # includes packages such as readr, dplyr, tidyr
+library(zoo)
+library(ggplot2)
+
 
 
 # User-defined inputs -----------------------------------------------------
@@ -26,8 +33,8 @@ lon <- "35.03"
 place_name <- "Kibomet, Kenya"
 
 # Specify dates of interest using YYYY-MM-DD format
-day.start <- "2021-09-01"
-day.end <- "2022-05-31"
+day_start <- "2021-09-01"
+day_end <- "2022-05-31"
 
 
 # --------------------------------------------------------------------------
@@ -49,32 +56,79 @@ print(paste("Calculate LTN over years: ", years[1], "-", years[2]))
 
 
 # This line combines the dates of interest into a single vector
-days <- c(day.start, day.end)
+days <- c(day_start, day_end)
 
 
 # Create chart title
-chart.title <- paste0("Weekly Climate Chart for ", place_name, "\n      Latitude "
-                      , lat,",  Longitude ", lon
-                      , "       ", days[1], " to ", days[2])
+chart_title <- paste0("Weekly climate chart for ", place_name, " ("
+                      , lat, ", ", lon, ") "
+                      , "\n", days[1], " to ", days[2])
 
 
-# aggregate over period of 7 days (weekly)
+dataToUse <- data.table::as.data.table(data.table::copy(df))
+
+# Subset the period of time the user wants charted to make an accumulation of "CURRENT time"
+# Subset the data if the user specifies
+if (is.null(day_start) == FALSE) {
+  dataToUse <- dataToUse[date >= as.Date(day_start)]
+}
+if (is.null(day_end) == FALSE) {
+  dataToUse <- dataToUse[date <= as.Date(day_end)]
+}
+if (nrow(dataToUse) == 0) {
+  stop('Current settings result in no data being plotted\n')
+}
+
+
+# temporally aggregate data over period of 7 days (weekly)
 daysToAggregateOver <- 7
+
+dataToUse$current_weekly_precip <- zoo::rollapply(data = dataToUse$precipitationAccumulationSum,
+               width = daysToAggregateOver,
+               FUN = sum,
+               align = "right",
+               na.rm = TRUE,
+               fill = NA,
+               partial = TRUE)
+
+# take every Nth row (7th for weekly stats)
+dataToUse <- dataToUse[seq(from = daysToAggregateOver + 1
+                           ,to = nrow(dataToUse)
+                           ,by = daysToAggregateOver),]
+
+
+
+# bar plot with weekly accumulated precip during current timeframe
+chart <- dataToUse %>%
+  ggplot2::ggplot(aes(x = date,
+                      y = current_weekly_precip)) +
+
+  # display a point for each season statistic
+  ggplot2::geom_col(fill = "#536878") +
+  theme_bw() +
+  labs(title = chart_title,
+       x = "Date",
+       y = "Weekly accumulated precipitation (mm)")
+
+
+
+
 
 
 # Calculate long term normal precip and add column labeled LTN
 
 
-# Subset the period of time the user wants charted to make an accumulation of "current time"
-
-
-# Create weekly precipitation chart with current precip as bars and LTN precip as line
+# add LTN precip data to climate chart as line
 
 
 
 
 
-# another approach: mimic the function here -------------------------------
+
+
+
+
+# another approach: mimic the aWhere chart function here -------------------------------
 
 # Modify the code within the aWhere function to expect the column provided
 # in the TomorrowNow data set
@@ -105,7 +159,61 @@ generateClimateChart <- function(data
   # because we are going to change the datastructure and it is a data.table we
   # will explicitly copy what is passed in so it doesn't violate user's scoping
   # expectations
-  dataToUse <- data.table::as.data.table(copy(data))
+  dataToUse <- data.table::as.data.table(data.table::copy(data))
+
+  # Subset the data if the user specifies
+  if (is.null(day_start) == FALSE) {
+    dataToUse <- dataToUse[date >= as.Date(day_start)]
+  }
+  if (is.null(day_end) == FALSE) {
+    dataToUse <- dataToUse[date <= as.Date(day_end)]
+  }
+  if (nrow(dataToUse) == 0) {
+    stop('Current settings result in no data being plotted\n')
+  }
+
+  # temporally aggregate
+  daysToAggregateOver <- 7
+  typesOfColumns <- c('.amount','.average','.stdDev') ### these col names are present in the aWhere dataset but not tomorrowNow
+  variablesToProcess <- unique(gsub(pattern = paste0(typesOfColumns,collapse = '|')
+                                    ,replacement = ''
+                                    ,x = colnames(dataToUse)))
+  variablesToProcess <- setdiff(variablesToProcess
+                                ,c('latitude','longitude','date','day'))
+
+  #The logic here is that the accumulated columns are already calculated for
+  #temporally subsetting and nothing needs to be done.  For variables that are
+  #logically summed over time, do that for the .amount and .average columns
+  #but the .stdDev column should have the mean taken.  For all other columns
+  #take the mean
+  for (x in 1:length(variablesToProcess)) {
+    for (y in 1:length(typesOfColumns)) {
+
+      currentColumn <- paste0(variablesToProcess[x],typesOfColumns[y])
+
+      #Additional years can be added to the dataset but only the .amount column will be present
+      if ((grepl(pattern = 'year|rolling'
+                 ,x = currentColumn
+                 ,ignore.case = TRUE) & typesOfColumns[y] %in% c('.average','.stdDev')) == TRUE) {
+        next
+
+      } else if (grepl(pattern = 'accumulated'
+                       ,x = currentColumn
+                       ,fixed = TRUE) == TRUE) {
+
+        eval(parse(text = paste0('dataToUse[,',paste0(currentColumn,'.new'),' := ',currentColumn,']')))
+      } else {
+        eval(parse(text = paste0('dataToUse[,',paste0(currentColumn,'.new'),' := zoo::rollapply(',currentColumn,'
+                                   ,width = daysToAggregateOver
+                                   ,align = "right"
+                                   ,FUN = ',returnAppropriateSummaryStatistic(variablesToProcess[x]),'
+                                   ,na.rm = TRUE
+                                   ,fill = NA
+                                   ,partial = TRUE)',seasonNumber_str,']')))
+      }
+    }
+  }
+
 
 
 }
