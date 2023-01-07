@@ -33,8 +33,8 @@ lon <- "35.03"
 place_name <- "Kibomet, Kenya"
 
 # Specify dates of interest using YYYY-MM-DD format
-day_start <- "2021-09-01"
-day_end <- "2022-05-31"
+date_start <- "2021-09-01"
+date_end <- "2022-05-31"
 
 
 # --------------------------------------------------------------------------
@@ -49,14 +49,19 @@ df <- readr::read_csv(data_filename)
 
 # Set the time span over which to calculate the long term normal (LTN):
 # the start year of the daily data file up to and through the current year -2
-years <- c(format(min(df$date), "%Y"), as.numeric(format(Sys.Date(), "%Y")) - 2)
+
+# interpreting "current year" as based on TODAY's date in real life
+#years <- c(format(min(df$date), "%Y"), as.numeric(format(Sys.Date(), "%Y")) - 2)
+
+# Interpreting "current year" based on the ending year of the "current" date range of interest
+years <- c(format(min(df$date), "%Y"), as.numeric(format(as.Date(date_end), "%Y")) - 2)
 
 # Print a message to the console indicating years for LTN calculation
 print(paste("Calculate LTN over years: ", years[1], "-", years[2]))
 
 
 # This line combines the dates of interest into a single vector
-days <- c(day_start, day_end)
+days <- c(date_start, date_end)
 
 
 # Create chart title
@@ -69,11 +74,11 @@ dataToUse <- data.table::as.data.table(data.table::copy(df))
 
 # Subset the period of time the user wants charted to make an accumulation of "CURRENT time"
 # Subset the data if the user specifies
-if (is.null(day_start) == FALSE) {
-  dataToUse <- dataToUse[date >= as.Date(day_start)]
+if (is.null(date_start) == FALSE) {
+  dataToUse <- dataToUse[date >= as.Date(date_start)]
 }
-if (is.null(day_end) == FALSE) {
-  dataToUse <- dataToUse[date <= as.Date(day_end)]
+if (is.null(date_end) == FALSE) {
+  dataToUse <- dataToUse[date <= as.Date(date_end)]
 }
 if (nrow(dataToUse) == 0) {
   stop('Current settings result in no data being plotted\n')
@@ -92,14 +97,14 @@ dataToUse$current_weekly_precip <- zoo::rollapply(data = dataToUse$precipitation
                partial = TRUE)
 
 # take every Nth row (7th for weekly stats)
-dataToUse <- dataToUse[seq(from = daysToAggregateOver + 1
+dataToUse_current <- dataToUse[seq(from = daysToAggregateOver + 1
                            ,to = nrow(dataToUse)
                            ,by = daysToAggregateOver),]
 
 
 
-# bar plot with weekly accumulated precip during current timeframe
-chart <- dataToUse %>%
+# bar plot with weekly accumulated precip during CURRENT timeframe of interest
+chart <- dataToUse_current %>%
   ggplot2::ggplot(aes(x = date,
                       y = current_weekly_precip)) +
 
@@ -115,18 +120,103 @@ chart <- dataToUse %>%
 
 
 
-# Calculate long term normal precip and add column labeled LTN
+# Calculate long term normal precip and add column labeled LTN ---------------------
+# JC says the LTN data will be available from the API in the future.
+# Until then, I will manually calculate the LTN data.
 
+monthDay_start <- format(as.Date(date_start), "%m-%d")
+monthDay_end <- format(as.Date(date_end), "%m-%d")
 
+# determine if the current dates of interest span multiple years
+# e.g. September 2021 to May 2022 spans 2021 and 2022
+dates_span_multi_years <- !(format(as.Date(date_start), "%Y") == format(as.Date(date_end), "%Y"))
 
+# Iterate through the LTN years
+for(y in years[1]:years[2]){ # loop through past years, to calculate LTN
+  print(y) # past year in the loop
 
+  # concatenate past year in the loop with the starting/ending month/day
+  # to get a date range of interest for subsetting the data
+  tmp_date_start <- as.Date(paste(y,monthDay_start,sep="-"),"%Y-%m-%d")
+  # check to see if the ending date extends into subsequent year.
+  # if so, increment y+1 for proper ending date
+  if(dates_span_multi_years){
+    tmp_date_end <- as.Date(paste(y+1,monthDay_end,sep="-"),"%Y-%m-%d")
+  } else{
+    tmp_date_end <- as.Date(paste(y,monthDay_end,sep="-"),"%Y-%m-%d")
+  }
 
+  # print the dates of interest for the past year of LTN calculations
+  print(paste0("LTN start date: ", tmp_date_start))
+  print(paste0("LTN end date: ", tmp_date_end))
 
+  # subset dataframe for LTN date range of interest for past year
+  dataToUse <- data.table::as.data.table(data.table::copy(df))
+  dataToUse <- dataToUse[date >= as.Date(tmp_date_start)]
+  dataToUse <- dataToUse[date <= as.Date(tmp_date_end)]
 
+  # calculate weekly accumulated precip for past year
+  dataToUse$past_weekly_precip <- zoo::rollapply(data = dataToUse$precipitationAccumulationSum,
+                                                    width = daysToAggregateOver,
+                                                    FUN = sum,
+                                                    align = "right",
+                                                    na.rm = TRUE,
+                                                    fill = NA,
+                                                    partial = TRUE)
 
+  # take every Nth row (7th for weekly stats)
+  dataToUse_past <- dataToUse[seq(from = daysToAggregateOver + 1
+                                     ,to = nrow(dataToUse)
+                                     ,by = daysToAggregateOver),]
+
+  # create new column for month-day per row
+  dataToUse_past$month_day <- format(as.Date(dataToUse_past$date),
+                                                format = "%m-%d")
+  dataToUse_past$year_start <- format(as.Date(dataToUse_past$date),
+                                     format = "%Y")
+  dataToUse_past$week_count <- c(1:nrow(dataToUse_past))
+
+  # during first iteration,
+  # create a dataframe to store the past years of weekly precip data
+  if(y == years[1]){
+    dataToUse_LTN <- data.frame(month_day = dataToUse_past$month_day,
+                                year_start = dataToUse_past$year_start,
+                                week_count = dataToUse_past$week_count,
+                                weekly_precip = dataToUse_past$past_weekly_precip)
+  } else{
+    dataToUse_LTN <- rbind(dataToUse_LTN,
+                           data.frame(month_day = dataToUse_past$month_day,
+                                      year_start = dataToUse_past$year_start,
+                                      week_count = dataToUse_past$week_count,
+                                      weekly_precip = dataToUse_past$past_weekly_precip))
+  }
+
+}
+
+# reshape LTN weekly data long to wide, with columns renamed using year
+dataToUse_LTN <- dataToUse_LTN %>%
+  tidyr::pivot_wider(id_cols = week_count,
+                     names_from = year_start,
+                     values_from = weekly_precip)
+
+# calculate LTN weekly precip by taking the average of
+# weekly aggregated precip across all LTN years
+dataToUse_LTN$weekly_precip_LTN <- rowMeans(dataToUse_LTN[,c(as.character(years[1]:years[2]))],
+                                            na.rm=TRUE)
 
 
 # add LTN precip data to climate chart as line
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -145,8 +235,8 @@ chart <- dataToUse %>%
 generateClimateChart <- function(data
                                 ,variable
                                 ,variable_rightAxis = NULL
-                                ,day_start = NULL
-                                ,day_end = NULL
+                                ,date_start = NULL
+                                ,date_end = NULL
                                 ,title = NULL
                                 ,e_precip = FALSE
                                 ,e_threshold = 35
@@ -170,11 +260,11 @@ generateClimateChart <- function(data
   dataToUse <- data.table::as.data.table(data.table::copy(data))
 
   # Subset the data if the user specifies
-  if (is.null(day_start) == FALSE) {
-    dataToUse <- dataToUse[date >= as.Date(day_start)]
+  if (is.null(date_start) == FALSE) {
+    dataToUse <- dataToUse[date >= as.Date(date_start)]
   }
-  if (is.null(day_end) == FALSE) {
-    dataToUse <- dataToUse[date <= as.Date(day_end)]
+  if (is.null(date_end) == FALSE) {
+    dataToUse <- dataToUse[date <= as.Date(date_end)]
   }
   if (nrow(dataToUse) == 0) {
     stop('Current settings result in no data being plotted\n')
