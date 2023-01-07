@@ -105,18 +105,26 @@ dataToUse_current <- dataToUse[seq(from = daysToAggregateOver + 1
 
 # bar plot with weekly accumulated precip during CURRENT timeframe of interest
 chart <- dataToUse_current %>%
-  ggplot2::ggplot(aes(x = date,
-                      y = current_weekly_precip)) +
-
-  # display a point for each season statistic
-  ggplot2::geom_col(fill = "#536878") +
+  ggplot2::ggplot() +
+  # display a bar for each weekly statistic
+  #ggplot2::geom_col(fill = "#94A5BB", aes(col = "#94A5BB")) +
+  ggplot2::geom_col(aes(x = date,
+                        y = current_weekly_precip,
+                        fill = "#94A5BB")) +
   theme_bw() +
   labs(title = chart_title,
        x = "Date",
-       y = "Weekly accumulated precipitation (mm)")
+       y = "Weekly accumulated precipitation (mm)")+
+  scale_fill_identity(name = NULL,
+                      breaks = c("#94A5BB"),
+                      labels = c("Current"),
+                      guide = "legend") +
+  theme(legend.position="bottom")
 
 
 
+# display chart with current weekly precipitation
+chart
 
 
 
@@ -179,13 +187,15 @@ for(y in years[1]:years[2]){ # loop through past years, to calculate LTN
   # during first iteration,
   # create a dataframe to store the past years of weekly precip data
   if(y == years[1]){
-    dataToUse_LTN <- data.frame(month_day = dataToUse_past$month_day,
+    dataToUse_LTN <- data.frame(date = dataToUse_past$date,
+                                month_day = dataToUse_past$month_day,
                                 year_start = dataToUse_past$year_start,
                                 week_count = dataToUse_past$week_count,
                                 weekly_precip = dataToUse_past$past_weekly_precip)
   } else{
     dataToUse_LTN <- rbind(dataToUse_LTN,
-                           data.frame(month_day = dataToUse_past$month_day,
+                           data.frame(date = dataToUse_past$date,
+                                      month_day = dataToUse_past$month_day,
                                       year_start = dataToUse_past$year_start,
                                       week_count = dataToUse_past$week_count,
                                       weekly_precip = dataToUse_past$past_weekly_precip))
@@ -204,120 +214,34 @@ dataToUse_LTN <- dataToUse_LTN %>%
 dataToUse_LTN$weekly_precip_LTN <- rowMeans(dataToUse_LTN[,c(as.character(years[1]:years[2]))],
                                             na.rm=TRUE)
 
+# merge date column to be able to plot the LTN values as a function of date
+# to match with the current weekly precip data.
+# NOTE the year will be irrelevant
+# so consider changing this to be month-day instead of YYYY-MM-DD
+# VS-TO-DO deal with differing number of weeks between current and LTN df's
+dataToUse_LTN$date <- dataToUse_current$date[1:nrow(dataToUse_LTN)]
+
 
 # add LTN precip data to climate chart as line
+chart_with_LTN <- chart +
+  ggplot2::geom_line(data = dataToUse_LTN,
+                     aes(x = date,
+                         y = weekly_precip_LTN,
+                         color = "#0F3564"))+
+  scale_color_identity(name = NULL,
+                       breaks = c("#0F3564"),
+                       labels = c("LTN"),
+                       guide = "legend") +
+  theme(legend.position="bottom")
 
 
 
+# show the chart with LTN line added
+chart_with_LTN
 
+# write chart to image file
+if(!exists("outputs")){
+  dir.create("outputs")}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# another approach: mimic the aWhere chart function here -------------------------------
-
-# Modify the code within the aWhere function to expect the column provided
-# in the TomorrowNow data set
-
-# attempting to mimic function with relevant variables
-generateClimateChart <- function(data
-                                ,variable
-                                ,variable_rightAxis = NULL
-                                ,date_start = NULL
-                                ,date_end = NULL
-                                ,title = NULL
-                                ,e_precip = FALSE
-                                ,e_threshold = 35
-                                ,doRoll = FALSE
-                                ,rolling_window = 30
-                                ,includeSTD = FALSE
-                                ,mainGraphType = 'line'
-                                ,daysToAggregateOver = NULL
-                                ,yAxisLimits = NA
-                                ,size_font_main_title = 16
-                                ,size_font_axis_titles = 14
-                                ,size_font_axis_labels = 12
-                                ,size_font_legend_entries = 12
-                                ,line_width = 1
-                                ,annotationsWhichSide = 'left') {
-
-
-  # because we are going to change the datastructure and it is a data.table we
-  # will explicitly copy what is passed in so it doesn't violate user's scoping
-  # expectations
-  dataToUse <- data.table::as.data.table(data.table::copy(data))
-
-  # Subset the data if the user specifies
-  if (is.null(date_start) == FALSE) {
-    dataToUse <- dataToUse[date >= as.Date(date_start)]
-  }
-  if (is.null(date_end) == FALSE) {
-    dataToUse <- dataToUse[date <= as.Date(date_end)]
-  }
-  if (nrow(dataToUse) == 0) {
-    stop('Current settings result in no data being plotted\n')
-  }
-
-  # temporally aggregate
-  daysToAggregateOver <- 7
-  typesOfColumns <- c('.amount','.average','.stdDev') ### these col names are present in the aWhere dataset but not tomorrowNow
-  variablesToProcess <- unique(gsub(pattern = paste0(typesOfColumns,collapse = '|')
-                                    ,replacement = ''
-                                    ,x = colnames(dataToUse)))
-  variablesToProcess <- setdiff(variablesToProcess
-                                ,c('latitude','longitude','date','day'))
-
-  #The logic here is that the accumulated columns are already calculated for
-  #temporally subsetting and nothing needs to be done.  For variables that are
-  #logically summed over time, do that for the .amount and .average columns
-  #but the .stdDev column should have the mean taken.  For all other columns
-  #take the mean
-  for (x in 1:length(variablesToProcess)) {
-    for (y in 1:length(typesOfColumns)) {
-
-      currentColumn <- paste0(variablesToProcess[x],typesOfColumns[y])
-
-      #Additional years can be added to the dataset but only the .amount column will be present
-      if ((grepl(pattern = 'year|rolling'
-                 ,x = currentColumn
-                 ,ignore.case = TRUE) & typesOfColumns[y] %in% c('.average','.stdDev')) == TRUE) {
-        next
-
-      } else if (grepl(pattern = 'accumulated'
-                       ,x = currentColumn
-                       ,fixed = TRUE) == TRUE) {
-
-        eval(parse(text = paste0('dataToUse[,',paste0(currentColumn,'.new'),' := ',currentColumn,']')))
-      } else {
-        eval(parse(text = paste0('dataToUse[,',paste0(currentColumn,'.new'),' := zoo::rollapply(',currentColumn,'
-                                   ,width = daysToAggregateOver
-                                   ,align = "right"
-                                   ,FUN = ',returnAppropriateSummaryStatistic(variablesToProcess[x]),'
-                                   ,na.rm = TRUE
-                                   ,fill = NA
-                                   ,partial = TRUE)',seasonNumber_str,']')))
-      }
-    }
-  }
-
-
-
-}
-
-weekly_chart_test <- generateClimateChart(data = weather.df,
-                                       variable = "precipitation",
-                                       title = chart.title,
-                                       daysToAggregateOver = 7,
-                                       mainGraphType = 'bar')
+ggplot2::ggsave(filename = paste0("outputs/", place_name, "_","weekly-climate-chart.png"),
+                plot = chart_with_LTN)
