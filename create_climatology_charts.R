@@ -88,6 +88,7 @@ if (nrow(dataToUse) == 0) {
 # temporally aggregate data over period of 7 days (weekly)
 daysToAggregateOver <- 7
 
+# CURRENT weekly accumulated precipitation
 dataToUse$current_weekly_precip <- zoo::rollapply(data = dataToUse$precipitationAccumulationSum,
                width = daysToAggregateOver,
                FUN = sum,
@@ -95,6 +96,15 @@ dataToUse$current_weekly_precip <- zoo::rollapply(data = dataToUse$precipitation
                na.rm = TRUE,
                fill = NA,
                partial = TRUE)
+
+# CURRENT weekly max temperature
+dataToUse$current_weekly_maxT <- zoo::rollapply(data = dataToUse$temperatureMax,
+                                                  width = daysToAggregateOver,
+                                                  FUN = max,
+                                                  align = "right",
+                                                  na.rm = TRUE,
+                                                  fill = NA,
+                                                  partial = TRUE)
 
 # take every Nth row (7th for weekly stats)
 dataToUse_current <- dataToUse[seq(from = daysToAggregateOver + 1
@@ -117,7 +127,7 @@ chart <- dataToUse_current %>%
        y = "Weekly accumulated precipitation (mm)")+
   scale_fill_identity(name = NULL,
                       breaks = c("#94A5BB"),
-                      labels = c("Current"),
+                      labels = c("Current precip"),
                       guide = "legend") +
   theme(legend.position="bottom")
 
@@ -125,6 +135,49 @@ chart <- dataToUse_current %>%
 
 # display chart with current weekly precipitation
 chart
+
+
+
+# calculate scale shift for second y-axis.
+# code from: https://finchstudio.io/blog/ggplot-dual-y-axes/
+max_first  <- max(dataToUse$current_weekly_precip)   # Specify max of first y axis
+max_second <- max(dataToUse$current_weekly_maxT) # Specify max of second y axis
+min_first  <- min(dataToUse$current_weekly_precip)   # Specify min of first y axis
+min_second <- min(dataToUse$current_weekly_maxT) # Specify min of second y axis
+
+# scale and shift variables calculated based on desired mins and maxes
+scale = (max_second - min_second)/(max_first - min_first)
+shift = min_first - min_second
+
+# Function to scale secondary axis
+scale_function <- function(x, scale, shift){
+  return ((x)*scale - shift)
+}
+
+# Function to scale secondary variable values
+inv_scale_function <- function(x, scale, shift){
+  return ((x + shift)/scale)
+}
+
+
+# Add max temp to chart as line with Celsius on the second y-axis
+chart <- chart +
+ggplot2::geom_line(data = dataToUse_current,
+                   aes(x = date,
+                       y = inv_scale_function(current_weekly_maxT,
+                                             scale,
+                                             shift),
+                       color = "black")) +
+  # create a second y-axis on the right side of the plot
+  scale_y_continuous(limits = c(min_first, max_first),
+                     sec.axis = sec_axis(~scale_function(., scale, shift),
+                                         name="Celsius")) +
+  scale_color_identity(name = NULL,
+                      breaks = c("black"),
+                      labels = c("Current maximum temperature"),
+                      guide = "legend") +
+  theme(legend.position="bottom")
+
 
 
 
@@ -227,10 +280,10 @@ chart_with_LTN <- chart +
   ggplot2::geom_line(data = dataToUse_LTN,
                      aes(x = date,
                          y = weekly_precip_LTN,
-                         color = "#0F3564"))+
+                         color = "#fc8d59"))+
   scale_color_identity(name = NULL,
-                       breaks = c("#0F3564"),
-                       labels = c("LTN"),
+                       breaks = c("black", "#fc8d59"),
+                       labels = c("Current max temp","LTN precip"),
                        guide = "legend") +
   theme(legend.position="bottom")
 
@@ -239,9 +292,15 @@ chart_with_LTN <- chart +
 # show the chart with LTN line added
 chart_with_LTN
 
+
+
 # write chart to image file
 if(!exists("outputs")){
   dir.create("outputs")}
 
 ggplot2::ggsave(filename = paste0("outputs/", place_name, "_","weekly-climate-chart.png"),
                 plot = chart_with_LTN)
+
+
+# MAX TEMPERATURE -----------------------------------------
+
