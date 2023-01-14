@@ -70,10 +70,10 @@ chart_title <- paste0("Weekly climate chart for ", place_name, " ("
                       , "\n", days[1], " to ", days[2])
 
 # Colors for chart geometries
-color_pre_curr <-"#35978f"
-color_pre_LTN <- "#003c30"
-color_maxT_curr <- "#bf812d"
-color_maxT_LTN <- "#543005"
+color_pre_curr <-"#94A5BB"
+color_pre_LTN <- "#0F3564"
+color_maxT_curr <- "#f46d43"
+color_maxT_LTN <- "#a50026"
 
 dataToUse <- data.table::as.data.table(data.table::copy(df))
 
@@ -247,13 +247,13 @@ chart <- dataToUse_current %>%
   ggplot2::ggplot() +
   ggplot2::geom_col(aes(x = date,
                         y = current_weekly_precip,
-                        fill = "#80cdc1")) +
+                        fill = color_pre_curr)) +
   theme_bw() +
   labs(title = chart_title,
        x = "Date",
        y = "Weekly accumulated precipitation (mm)")+
   scale_fill_identity(name = NULL,
-                      breaks = c("#80cdc1"),
+                      breaks = c(color_pre_curr),
                       labels = c("Current precip"),
                       guide = "legend") +
   theme(legend.position="bottom")
