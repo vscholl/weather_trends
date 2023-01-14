@@ -69,6 +69,11 @@ chart_title <- paste0("Weekly climate chart for ", place_name, " ("
                       , lat, ", ", lon, ") "
                       , "\n", days[1], " to ", days[2])
 
+# Colors for chart geometries
+color_pre_curr <-"#35978f"
+color_pre_LTN <- "#003c30"
+color_maxT_curr <- "#bf812d"
+color_maxT_LTN <- "#543005"
 
 dataToUse <- data.table::as.data.table(data.table::copy(df))
 
@@ -84,11 +89,10 @@ if (nrow(dataToUse) == 0) {
   stop('Current settings result in no data being plotted\n')
 }
 
-
 # temporally aggregate data over period of 7 days (weekly)
 daysToAggregateOver <- 7
 
-# CURRENT weekly accumulated precipitation
+# calculate CURRENT weekly accumulated precipitation
 dataToUse$current_weekly_precip <- zoo::rollapply(data = dataToUse$precipitationAccumulationSum,
                width = daysToAggregateOver,
                FUN = sum,
@@ -97,7 +101,7 @@ dataToUse$current_weekly_precip <- zoo::rollapply(data = dataToUse$precipitation
                fill = NA,
                partial = TRUE)
 
-# CURRENT weekly max temperature
+# calculate CURRENT weekly max temperature
 dataToUse$current_weekly_maxT <- zoo::rollapply(data = dataToUse$temperatureMax,
                                                   width = daysToAggregateOver,
                                                   FUN = max,
@@ -110,75 +114,6 @@ dataToUse$current_weekly_maxT <- zoo::rollapply(data = dataToUse$temperatureMax,
 dataToUse_current <- dataToUse[seq(from = daysToAggregateOver + 1
                            ,to = nrow(dataToUse)
                            ,by = daysToAggregateOver),]
-
-
-
-# bar plot with weekly accumulated precip during CURRENT timeframe of interest
-chart <- dataToUse_current %>%
-  ggplot2::ggplot() +
-  # display a bar for each weekly statistic
-  #ggplot2::geom_col(fill = "#94A5BB", aes(col = "#94A5BB")) +
-  ggplot2::geom_col(aes(x = date,
-                        y = current_weekly_precip,
-                        fill = "#94A5BB")) +
-  theme_bw() +
-  labs(title = chart_title,
-       x = "Date",
-       y = "Weekly accumulated precipitation (mm)")+
-  scale_fill_identity(name = NULL,
-                      breaks = c("#94A5BB"),
-                      labels = c("Current precip"),
-                      guide = "legend") +
-  theme(legend.position="bottom")
-
-
-
-# display chart with current weekly precipitation
-chart
-
-
-
-# calculate scale shift for second y-axis.
-# code from: https://finchstudio.io/blog/ggplot-dual-y-axes/
-max_first  <- max(dataToUse$current_weekly_precip)   # Specify max of first y axis
-max_second <- max(dataToUse$current_weekly_maxT) # Specify max of second y axis
-min_first  <- min(dataToUse$current_weekly_precip)   # Specify min of first y axis
-min_second <- min(dataToUse$current_weekly_maxT) # Specify min of second y axis
-
-# scale and shift variables calculated based on desired mins and maxes
-scale = (max_second - min_second)/(max_first - min_first)
-shift = min_first - min_second
-
-# Function to scale secondary axis
-scale_function <- function(x, scale, shift){
-  return ((x)*scale - shift)
-}
-
-# Function to scale secondary variable values
-inv_scale_function <- function(x, scale, shift){
-  return ((x + shift)/scale)
-}
-
-
-# Add max temp to chart as line with Celsius on the second y-axis
-chart <- chart +
-ggplot2::geom_line(data = dataToUse_current,
-                   aes(x = date,
-                       y = inv_scale_function(current_weekly_maxT,
-                                             scale,
-                                             shift),
-                       color = "black")) +
-  # create a second y-axis on the right side of the plot
-  scale_y_continuous(limits = c(min_first, max_first),
-                     sec.axis = sec_axis(~scale_function(., scale, shift),
-                                         name="Celsius")) +
-  scale_color_identity(name = NULL,
-                      breaks = c("black"),
-                      labels = c("Current maximum temperature"),
-                      guide = "legend") +
-  theme(legend.position="bottom")
-
-
 
 
 # Calculate long term normal precip and add column labeled LTN ---------------------
@@ -224,6 +159,14 @@ for(y in years[1]:years[2]){ # loop through past years, to calculate LTN
                                                     na.rm = TRUE,
                                                     fill = NA,
                                                     partial = TRUE)
+  # calculated weekly max temp for  past year
+  dataToUse$past_weekly_maxT <- zoo::rollapply(data = dataToUse$temperatureMax,
+                                                 width = daysToAggregateOver,
+                                                 FUN = max,
+                                                 align = "right",
+                                                 na.rm = TRUE,
+                                                 fill = NA,
+                                                 partial = TRUE)
 
   # take every Nth row (7th for weekly stats)
   dataToUse_past <- dataToUse[seq(from = daysToAggregateOver + 1
@@ -244,27 +187,30 @@ for(y in years[1]:years[2]){ # loop through past years, to calculate LTN
                                 month_day = dataToUse_past$month_day,
                                 year_start = dataToUse_past$year_start,
                                 week_count = dataToUse_past$week_count,
-                                weekly_precip = dataToUse_past$past_weekly_precip)
+                                weekly_precip = dataToUse_past$past_weekly_precip,
+                                weekly_maxT = dataToUse_past$past_weekly_maxT)
   } else{
     dataToUse_LTN <- rbind(dataToUse_LTN,
                            data.frame(date = dataToUse_past$date,
                                       month_day = dataToUse_past$month_day,
                                       year_start = dataToUse_past$year_start,
                                       week_count = dataToUse_past$week_count,
-                                      weekly_precip = dataToUse_past$past_weekly_precip))
+                                      weekly_precip = dataToUse_past$past_weekly_precip,
+                                      weekly_maxT = dataToUse_past$past_weekly_maxT))
   }
 
 }
 
-# reshape LTN weekly data long to wide, with columns renamed using year
-dataToUse_LTN <- dataToUse_LTN %>%
+# LTN PRECIP
+# reshape LTN weekly precip data long to wide, with columns renamed using year
+dataToUse_LTN_precip <- dataToUse_LTN %>%
   tidyr::pivot_wider(id_cols = week_count,
                      names_from = year_start,
                      values_from = weekly_precip)
 
 # calculate LTN weekly precip by taking the average of
 # weekly aggregated precip across all LTN years
-dataToUse_LTN$weekly_precip_LTN <- rowMeans(dataToUse_LTN[,c(as.character(years[1]:years[2]))],
+dataToUse_LTN_precip$weekly_precip_LTN <- rowMeans(dataToUse_LTN_precip[,c(as.character(years[1]:years[2]))],
                                             na.rm=TRUE)
 
 # merge date column to be able to plot the LTN values as a function of date
@@ -272,24 +218,107 @@ dataToUse_LTN$weekly_precip_LTN <- rowMeans(dataToUse_LTN[,c(as.character(years[
 # NOTE the year will be irrelevant
 # so consider changing this to be month-day instead of YYYY-MM-DD
 # VS-TO-DO deal with differing number of weeks between current and LTN df's
-dataToUse_LTN$date <- dataToUse_current$date[1:nrow(dataToUse_LTN)]
+dataToUse_LTN_precip$date <- dataToUse_current$date[1:nrow(dataToUse_LTN_precip)]
 
 
-# add LTN precip data to climate chart as line
-chart_with_LTN <- chart +
-  ggplot2::geom_line(data = dataToUse_LTN,
-                     aes(x = date,
-                         y = weekly_precip_LTN,
-                         color = "#fc8d59"))+
-  scale_color_identity(name = NULL,
-                       breaks = c("black", "#fc8d59"),
-                       labels = c("Current max temp","LTN precip"),
-                       guide = "legend") +
+
+
+# LTN MAX TEMP calculations ------------------------------------------------
+# reshape LTN weekly max temp data long to wide, with columns renamed using year
+dataToUse_LTN_maxT <- dataToUse_LTN %>%
+  tidyr::pivot_wider(id_cols = week_count,
+                     names_from = year_start,
+                     values_from = weekly_maxT)
+
+# calculate LTN weekly max temp by taking the average of
+# weekly aggregated max temp across all LTN years
+dataToUse_LTN_maxT$weekly_maxT_LTN <- rowMeans(dataToUse_LTN_maxT[,c(as.character(years[1]:years[2]))],
+                                                   na.rm=TRUE)
+
+# merge date column to be able to plot the LTN values as a function of date
+dataToUse_LTN_maxT$date <- dataToUse_current$date[1:nrow(dataToUse_LTN_maxT)]
+
+
+# CREATE THE CHART ---------------------------------------------------------
+
+# CURRENT PRECIP bar plot
+# bar plot with weekly accumulated precip during CURRENT timeframe of interest
+chart <- dataToUse_current %>%
+  ggplot2::ggplot() +
+  ggplot2::geom_col(aes(x = date,
+                        y = current_weekly_precip,
+                        fill = "#80cdc1")) +
+  theme_bw() +
+  labs(title = chart_title,
+       x = "Date",
+       y = "Weekly accumulated precipitation (mm)")+
+  scale_fill_identity(name = NULL,
+                      breaks = c("#80cdc1"),
+                      labels = c("Current precip"),
+                      guide = "legend") +
   theme(legend.position="bottom")
 
+# display chart with current weekly precipitation
+chart
+
+# calculate scale shift for second y-axis (max temperatures)
+# code from: https://finchstudio.io/blog/ggplot-dual-y-axes/
+max_first  <- max(dataToUse_current$current_weekly_precip)   # Specify max of first y axis
+max_second <- max(dataToUse_current$current_weekly_maxT,
+                  dataToUse_LTN_maxT$weekly_maxT_LTN,
+                  na.rm = TRUE) # Specify max of second y axis
+min_first  <- min(dataToUse_current$current_weekly_precip)   # Specify min of first y axis
+min_second <- min(dataToUse$current_weekly_maxT,
+                  dataToUse_LTN_maxT$weekly_maxT_LTN,
+                  na.rm = TRUE) # Specify min of second y axis
+
+# scale and shift variables calculated based on desired mins and maxes
+scale = (max_second - min_second)/(max_first - min_first)
+shift = min_first - min_second
+
+# Function to scale secondary axis
+scale_function <- function(x, scale, shift){
+  return ((x)*scale - shift)
+}
+
+# Function to scale secondary variable values
+inv_scale_function <- function(x, scale, shift){
+  return ((x + shift)/scale)
+}
 
 
-# show the chart with LTN line added
+# Add the other geometries to the chart
+chart_with_LTN <- chart +
+
+  # LTN precip
+  ggplot2::geom_line(data = dataToUse_LTN_precip,
+                     aes(x = date,
+                         y = weekly_precip_LTN,
+                         color = color_pre_LTN))+
+
+  # CURRENT Max Temperature
+  ggplot2::geom_line(data = dataToUse_current,
+                     aes(x = date,
+                         y = inv_scale_function(current_weekly_maxT,scale,shift),
+                         color = color_maxT_curr)) +
+
+  # LTN Max temperature
+  ggplot2::geom_line(data = dataToUse_LTN_maxT,
+                     aes(x = date,
+                         y = inv_scale_function(weekly_maxT_LTN,scale,shift),
+                         color = color_maxT_LTN)) +
+
+
+  # create a second y-axis on the right side of the plot
+  scale_y_continuous(sec.axis = sec_axis(~scale_function(., scale, shift),
+                                         name="Celsius")) +
+  scale_color_identity(name = NULL,
+                       breaks = c(color_pre_LTN, color_maxT_curr, color_maxT_LTN),
+                       labels = c("LTN precip", "Current max T", "LTN max T"),
+                       guide = "legend") +
+
+  theme(legend.position="bottom")
+
 chart_with_LTN
 
 
@@ -301,6 +330,4 @@ if(!exists("outputs")){
 ggplot2::ggsave(filename = paste0("outputs/", place_name, "_","weekly-climate-chart.png"),
                 plot = chart_with_LTN)
 
-
-# MAX TEMPERATURE -----------------------------------------
 
