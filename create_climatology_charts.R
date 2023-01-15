@@ -198,7 +198,6 @@ for(y in years[1]:years[2]){ # loop through past years, to calculate LTN
                                       weekly_precip = dataToUse_past$past_weekly_precip,
                                       weekly_maxT = dataToUse_past$past_weekly_maxT))
   }
-
 }
 
 # LTN PRECIP
@@ -219,8 +218,6 @@ dataToUse_LTN_precip$weekly_precip_LTN <- rowMeans(dataToUse_LTN_precip[,c(as.ch
 # so consider changing this to be month-day instead of YYYY-MM-DD
 # VS-TO-DO deal with differing number of weeks between current and LTN df's
 dataToUse_LTN_precip$date <- dataToUse_current$date[1:nrow(dataToUse_LTN_precip)]
-
-
 
 
 # LTN MAX TEMP calculations ------------------------------------------------
@@ -286,7 +283,6 @@ inv_scale_function <- function(x, scale, shift){
   return ((x + shift)/scale)
 }
 
-
 # Add the other geometries to the chart
 chart_with_LTN <- chart +
 
@@ -312,22 +308,19 @@ chart_with_LTN <- chart +
   # create a second y-axis on the right side of the plot
   scale_y_continuous(sec.axis = sec_axis(~scale_function(., scale, shift),
                                          name="Celsius")) +
+  # specify the geometry colors and labels in the legend
   scale_color_identity(name = NULL,
-                       breaks = c(color_pre_LTN, color_maxT_curr, color_maxT_LTN),
-                       labels = c("LTN precip", "Current max T", "LTN max T"),
+                       breaks = c(color_pre_LTN, color_maxT_LTN, color_maxT_curr),
+                       labels = c("LTN precip", "LTN max T", "Current max T"),
                        guide = "legend") +
-
   theme(legend.position="bottom")
 
 chart_with_LTN
-
 
 
 # write chart to image file
 if(!exists("outputs")){
   dir.create("outputs")}
 
-ggplot2::ggsave(filename = paste0("outputs/", place_name, "_","weekly-climate-chart.png"),
+ggplot2::ggsave(filename = paste0("outputs/", place_name, "_", "weekly-climate-chart.png"),
                 plot = chart_with_LTN)
-
-
