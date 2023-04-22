@@ -1,7 +1,7 @@
-# Create climatology charts - LTN PRE-CALCULATED & CONTAINED WITHIN FILE.
+# Create climatology charts - LTN COLUMNS INCLUDED IN DATA FILE
 
 # This script reads a weather data file (.csv) with long-term normal (LTN)
-# values pre-calculated and contained within the file.
+# columns already contained within the file.
 # The outputs are climatology charts visualizing current and LTN
 # weekly climate variables.
 
@@ -20,7 +20,7 @@ library(ggplot2)
 # User-defined inputs -----------------------------------------------------
 
 # Specify the file (.csv) containing weather data.
-data_filename <- "data/Kenya_TA00320_01-01_to_04-29.csv"
+data_filename <- "data/Kenya_TA00320_01-01_to_04-29_FAKE-PET.csv"
 
 # Specify the place name, latitude, and longitude coordinates
 lat <- "1.06"
@@ -71,12 +71,16 @@ if (is.null(date_end) == FALSE) {
 if (nrow(dataToUse) == 0) {
   stop('Current settings result in no data being plotted\n')
 }
+# Add a check for the length of the current timeframe of interest.
+if (as.numeric(difftime(as.Date(date_end), as.Date(date_start), units = "days")) > 365){
+  stop('Date range of interest cannot exceed 365 days.\n')
+}
 
 # temporally aggregate data over period of 7 days (weekly)
 daysToAggregateOver <- 7
 
 # calculate CURRENT weekly accumulated precipitation
-dataToUse$current_weekly_precip <- zoo::rollapply(data = dataToUse$precipitationAccumulationSum,
+dataToUse$current_weekly_precip <- zoo::rollapply(data = dataToUse$rainAccumulationSum,
                width = daysToAggregateOver,
                FUN = sum,
                align = "right",
@@ -84,7 +88,7 @@ dataToUse$current_weekly_precip <- zoo::rollapply(data = dataToUse$precipitation
                fill = NA,
                partial = TRUE)
 
-# calculate CURRENT weekly max temperature
+# calculate CURRENT weekly maximum temperature
 dataToUse$current_weekly_maxT <- zoo::rollapply(data = dataToUse$temperatureMax,
                                                   width = daysToAggregateOver,
                                                   FUN = max,
@@ -93,137 +97,83 @@ dataToUse$current_weekly_maxT <- zoo::rollapply(data = dataToUse$temperatureMax,
                                                   fill = NA,
                                                   partial = TRUE)
 
+# calculate CURRENT weekly minimum temperature
+dataToUse$current_weekly_minT <- zoo::rollapply(data = dataToUse$temperatureMin,
+                                                width = daysToAggregateOver,
+                                                FUN = min,
+                                                align = "right",
+                                                na.rm = TRUE,
+                                                fill = NA,
+                                                partial = TRUE)
+
+# calculate CURRENT weekly PET to be divided by weekly precip for P/PET
+dataToUse$current_weekly_PET <- zoo::rollapply(data = dataToUse$evapotranspirationSum,
+                                                width = daysToAggregateOver,
+                                                FUN = sum,
+                                                align = "right",
+                                                na.rm = TRUE,
+                                                fill = NA,
+                                                partial = TRUE)
+
+# calculate CURRENT weekly P/PET. Divide weekly precip sums by weekly PET sums.
+dataToUse$current_weekly_PPET <- dataToUse$current_weekly_precip / dataToUse$current_weekly_PET
+
+
+# Aggregate long-term normal precip from existing column labeled LTN ---------------------
+# temporally aggregate data over period of 7 days (weekly)
+
+# calculate LTN weekly accumulated precipitation
+dataToUse$LTN_weekly_precip <- zoo::rollapply(data = dataToUse$LTNpre,
+                                                  width = daysToAggregateOver,
+                                                  FUN = sum,
+                                                  align = "right",
+                                                  na.rm = TRUE,
+                                                  fill = NA,
+                                                  partial = TRUE)
+
+# calculate LTN weekly max temperature
+dataToUse$LTN_weekly_maxT <- zoo::rollapply(data = dataToUse$LTNMaxT,
+                                                width = daysToAggregateOver,
+                                                FUN = max,
+                                                align = "right",
+                                                na.rm = TRUE,
+                                                fill = NA,
+                                                partial = TRUE)
+
+# calculate LTN weekly min temperature
+dataToUse$LTN_weekly_minT <- zoo::rollapply(data = dataToUse$LTNMinT,
+                                            width = daysToAggregateOver,
+                                            FUN = min,
+                                            align = "right",
+                                            na.rm = TRUE,
+                                            fill = NA,
+                                            partial = TRUE)
+
+# calculate LTN weekly PET
+dataToUse$LTN_weekly_PET <- zoo::rollapply(data = dataToUse$LTNPET,
+                                            width = daysToAggregateOver,
+                                            FUN = sum,
+                                            align = "right",
+                                            na.rm = TRUE,
+                                            fill = NA,
+                                            partial = TRUE)
+
+# calculate LTN weekly P/PET
+dataToUse$LTN_weekly_PPET <- dataToUse$LTN_weekly_precip / dataToUse$LTN_weekly_PET
+
+
 # take every Nth row (7th for weekly stats)
-dataToUse_current <- dataToUse[seq(from = daysToAggregateOver + 1
-                           ,to = nrow(dataToUse)
-                           ,by = daysToAggregateOver),]
+dataToUse_weeklyStats <- dataToUse[seq(from = 1
+                                   ,to = nrow(dataToUse)
+                                   ,by = daysToAggregateOver),]
 
 
-# Calculate long term normal precip and add column labeled LTN ---------------------
-# JC says the LTN data will be available from the API in the future.
-# Until then, I will manually calculate the LTN data.
+# CREATE CLIMATOLOGY CHART ----------------------------------------------
 
-monthDay_start <- format(as.Date(date_start), "%m-%d")
-monthDay_end <- format(as.Date(date_end), "%m-%d")
+# Current and LTN weekly precipitation along with maximum temperature
 
-# determine if the current dates of interest span multiple years
-# e.g. September 2021 to May 2022 spans 2021 and 2022
-dates_span_multi_years <- !(format(as.Date(date_start), "%Y") == format(as.Date(date_end), "%Y"))
-
-# Iterate through the LTN years
-for(y in years[1]:years[2]){ # loop through past years, to calculate LTN
-  print(y) # past year in the loop
-
-  # concatenate past year in the loop with the starting/ending month/day
-  # to get a date range of interest for subsetting the data
-  tmp_date_start <- as.Date(paste(y,monthDay_start,sep="-"),"%Y-%m-%d")
-  # check to see if the ending date extends into subsequent year.
-  # if so, increment y+1 for proper ending date
-  if(dates_span_multi_years){
-    tmp_date_end <- as.Date(paste(y+1,monthDay_end,sep="-"),"%Y-%m-%d")
-  } else{
-    tmp_date_end <- as.Date(paste(y,monthDay_end,sep="-"),"%Y-%m-%d")
-  }
-
-  # print the dates of interest for the past year of LTN calculations
-  print(paste0("LTN start date: ", tmp_date_start))
-  print(paste0("LTN end date: ", tmp_date_end))
-
-  # subset dataframe for LTN date range of interest for past year
-  dataToUse <- data.table::as.data.table(data.table::copy(df))
-  dataToUse <- dataToUse[date >= as.Date(tmp_date_start)]
-  dataToUse <- dataToUse[date <= as.Date(tmp_date_end)]
-
-  # calculate weekly accumulated precip for past year
-  dataToUse$past_weekly_precip <- zoo::rollapply(data = dataToUse$precipitationAccumulationSum,
-                                                    width = daysToAggregateOver,
-                                                    FUN = sum,
-                                                    align = "right",
-                                                    na.rm = TRUE,
-                                                    fill = NA,
-                                                    partial = TRUE)
-  # calculated weekly max temp for  past year
-  dataToUse$past_weekly_maxT <- zoo::rollapply(data = dataToUse$temperatureMax,
-                                                 width = daysToAggregateOver,
-                                                 FUN = max,
-                                                 align = "right",
-                                                 na.rm = TRUE,
-                                                 fill = NA,
-                                                 partial = TRUE)
-
-  # take every Nth row (7th for weekly stats)
-  dataToUse_past <- dataToUse[seq(from = daysToAggregateOver + 1
-                                     ,to = nrow(dataToUse)
-                                     ,by = daysToAggregateOver),]
-
-  # create new column for month-day per row
-  dataToUse_past$month_day <- format(as.Date(dataToUse_past$date),
-                                                format = "%m-%d")
-  dataToUse_past$year_start <- format(as.Date(dataToUse_past$date),
-                                     format = "%Y")
-  dataToUse_past$week_count <- c(1:nrow(dataToUse_past))
-
-  # during first iteration,
-  # create a dataframe to store the past years of weekly precip data
-  if(y == years[1]){
-    dataToUse_LTN <- data.frame(date = dataToUse_past$date,
-                                month_day = dataToUse_past$month_day,
-                                year_start = dataToUse_past$year_start,
-                                week_count = dataToUse_past$week_count,
-                                weekly_precip = dataToUse_past$past_weekly_precip,
-                                weekly_maxT = dataToUse_past$past_weekly_maxT)
-  } else{
-    dataToUse_LTN <- rbind(dataToUse_LTN,
-                           data.frame(date = dataToUse_past$date,
-                                      month_day = dataToUse_past$month_day,
-                                      year_start = dataToUse_past$year_start,
-                                      week_count = dataToUse_past$week_count,
-                                      weekly_precip = dataToUse_past$past_weekly_precip,
-                                      weekly_maxT = dataToUse_past$past_weekly_maxT))
-  }
-}
-
-# LTN PRECIP
-# reshape LTN weekly precip data long to wide, with columns renamed using year
-dataToUse_LTN_precip <- dataToUse_LTN %>%
-  tidyr::pivot_wider(id_cols = week_count,
-                     names_from = year_start,
-                     values_from = weekly_precip)
-
-# calculate LTN weekly precip by taking the average of
-# weekly aggregated precip across all LTN years
-dataToUse_LTN_precip$weekly_precip_LTN <- rowMeans(dataToUse_LTN_precip[,c(as.character(years[1]:years[2]))],
-                                            na.rm=TRUE)
-
-# merge date column to be able to plot the LTN values as a function of date
-# to match with the current weekly precip data.
-# NOTE the year will be irrelevant
-# so consider changing this to be month-day instead of YYYY-MM-DD
-# VS-TO-DO deal with differing number of weeks between current and LTN df's
-dataToUse_LTN_precip$date <- dataToUse_current$date[1:nrow(dataToUse_LTN_precip)]
-
-
-# LTN MAX TEMP calculations ------------------------------------------------
-# reshape LTN weekly max temp data long to wide, with columns renamed using year
-dataToUse_LTN_maxT <- dataToUse_LTN %>%
-  tidyr::pivot_wider(id_cols = week_count,
-                     names_from = year_start,
-                     values_from = weekly_maxT)
-
-# calculate LTN weekly max temp by taking the average of
-# weekly aggregated max temp across all LTN years
-dataToUse_LTN_maxT$weekly_maxT_LTN <- rowMeans(dataToUse_LTN_maxT[,c(as.character(years[1]:years[2]))],
-                                                   na.rm=TRUE)
-
-# merge date column to be able to plot the LTN values as a function of date
-dataToUse_LTN_maxT$date <- dataToUse_current$date[1:nrow(dataToUse_LTN_maxT)]
-
-
-# CREATE THE CHART ---------------------------------------------------------
-
-# CURRENT PRECIP bar plot
 # bar plot with weekly accumulated precip during CURRENT timeframe of interest
-chart <- dataToUse_current %>%
+chart <- dataToUse_weeklyStats %>%
   ggplot2::ggplot() +
   ggplot2::geom_col(aes(x = date,
                         y = current_weekly_precip,
@@ -243,24 +193,21 @@ chart
 
 # calculate scale shift for second y-axis (max temperatures)
 # code from: https://finchstudio.io/blog/ggplot-dual-y-axes/
-max_first  <- max(dataToUse_current$current_weekly_precip)   # Specify max of first y axis
-max_second <- max(dataToUse_current$current_weekly_maxT,
-                  dataToUse_LTN_maxT$weekly_maxT_LTN,
+max_first  <- max(dataToUse_weeklyStats$current_weekly_precip)   # Specify max of first y axis
+max_second <- max(dataToUse_weeklyStats$current_weekly_maxT,
+                  dataToUse_weeklyStats$LTN_weekly_maxT,
                   na.rm = TRUE) # Specify max of second y axis
-min_first  <- min(dataToUse_current$current_weekly_precip)   # Specify min of first y axis
-min_second <- min(dataToUse$current_weekly_maxT,
-                  dataToUse_LTN_maxT$weekly_maxT_LTN,
+min_first  <- min(dataToUse_weeklyStats$current_weekly_precip)   # Specify min of first y axis
+min_second <- min(dataToUse_weeklyStats$current_weekly_maxT,
+                  dataToUse_weeklyStats$LTN_weekly_maxT,
                   na.rm = TRUE) # Specify min of second y axis
-
 # scale and shift variables calculated based on desired mins and maxes
 scale = (max_second - min_second)/(max_first - min_first)
 shift = min_first - min_second
-
 # Function to scale secondary axis
 scale_function <- function(x, scale, shift){
   return ((x)*scale - shift)
 }
-
 # Function to scale secondary variable values
 inv_scale_function <- function(x, scale, shift){
   return ((x + shift)/scale)
@@ -270,21 +217,20 @@ inv_scale_function <- function(x, scale, shift){
 chart_with_LTN <- chart +
 
   # LTN precip
-  ggplot2::geom_line(data = dataToUse_LTN_precip,
-                     aes(x = date,
-                         y = weekly_precip_LTN,
+  ggplot2::geom_line(data = dataToUse_weeklyStats,
+                     aes(x = date, y = LTN_weekly_precip,
                          color = color_pre_LTN))+
 
   # CURRENT Max Temperature
-  ggplot2::geom_line(data = dataToUse_current,
+  ggplot2::geom_line(data = dataToUse_weeklyStats,
                      aes(x = date,
                          y = inv_scale_function(current_weekly_maxT,scale,shift),
                          color = color_maxT_curr)) +
 
   # LTN Max temperature
-  ggplot2::geom_line(data = dataToUse_LTN_maxT,
+  ggplot2::geom_line(data = dataToUse_weeklyStats,
                      aes(x = date,
-                         y = inv_scale_function(weekly_maxT_LTN,scale,shift),
+                         y = inv_scale_function(LTN_weekly_maxT,scale,shift),
                          color = color_maxT_LTN)) +
 
 
@@ -297,13 +243,180 @@ chart_with_LTN <- chart +
                        labels = c("LTN precip", "LTN max T", "Current max T"),
                        guide = "legend") +
   theme(legend.position="bottom")
-
+# Display the chart
 chart_with_LTN
+
 
 
 # write chart to image file
 if(!exists("outputs")){
   dir.create("outputs")}
 
-ggplot2::ggsave(filename = paste0("outputs/", place_name, "_", "weekly-climate-chart.png"),
+ggplot2::ggsave(filename = paste0("outputs/", place_name, "_",
+                                  "weekly-climate-chart.png"),
+                width = 8, height = 6, units = "in",
                 plot = chart_with_LTN)
+
+
+
+
+
+
+
+
+
+
+
+
+
+# CREATE INDIVIDUAL CHART PER WEATHER VARIABLE  -------------------------------
+# Plot the current (bars) and LTN (solid line) with colors:
+color_var_curr <- "#94A5BB"
+color_var_LTN <- "#0F3564"
+
+# PRECIPIRATION (RAINFALL)
+title_rainfall <- paste0("Weekly rainfall: current and Long-Term Normal (LTN) \nfor ", place_name, " ("
+                      , lat, ", ", lon, ") "
+                      , days[1], " to ", days[2])
+
+chart_rainfall <- ggplot2::ggplot(dataToUse_weeklyStats, aes(date)) +
+  ggplot2::geom_col(aes(y = current_weekly_precip, fill = color_var_curr)) +
+  ggplot2::geom_line(aes(y = LTN_weekly_precip, color = color_var_LTN)) +
+  scale_x_date(date_labels = "%B %d"
+               #,date_breaks = "2 weeks"
+               #,limits = c(as.Date(date_start), as.Date(date_end))
+               ) +
+  labs(title = title_rainfall,
+       x = "Week start date",
+       y = "Weekly accumulated rainfall (mm)")+
+  # format the legend items based on their color and names
+  scale_fill_identity(name = NULL,
+                      breaks = c(color_var_curr),
+                      labels = c("Current rainfall"),
+                      guide = "legend") +
+  scale_color_identity(name = NULL,
+                       breaks = c(color_var_LTN),
+                       labels = c("LTN Rainfall"),
+                       guide = "legend") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(legend.position="right")
+
+# display & save chart
+chart_rainfall
+
+ggplot2::ggsave(filename = paste0("outputs/", place_name, "_",
+                                  "weekly-rainfall.png"),
+                width = 8, height = 6, units = "in",
+                plot = chart_rainfall)
+
+
+
+
+
+# MAXIMUM TEMPERATURE ------------------------------------------------
+title_maxT <- paste0("Weekly maximum temperature: current and Long-Term Normal (LTN) \nfor ", place_name, " ("
+                         , lat, ", ", lon, ") "
+                         , days[1], " to ", days[2])
+
+chart_maxT <- ggplot2::ggplot(dataToUse_weeklyStats, aes(date)) +
+  ggplot2::geom_col(aes(y = current_weekly_maxT, fill = color_var_curr)) +
+  ggplot2::geom_line(aes(y = LTN_weekly_maxT, color = color_var_LTN)) +
+  scale_x_date(date_labels = "%B %d"
+  ) +
+  labs(title = title_maxT,
+       x = "Week start date",
+       y = "Weekly maximum temperature (deg C)")+
+  # format the legend items based on their color and names
+  scale_fill_identity(name = NULL,
+                      breaks = c(color_var_curr),
+                      labels = c("Current max temp"),
+                      guide = "legend") +
+  scale_color_identity(name = NULL,
+                       breaks = c(color_var_LTN),
+                       labels = c("LTN max temp "),
+                       guide = "legend") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(legend.position="right")
+
+# display & save chart
+chart_maxT
+
+ggplot2::ggsave(filename = paste0("outputs/", place_name, "_",
+                                  "weekly-maxT.png"),
+                width = 8, height = 6, units = "in",
+                plot = chart_maxT)
+
+
+# MINIMUM TEMPERATURE ------------------------------------------------
+title_minT <- paste0("Weekly minimum temperature: current and Long-Term Normal (LTN) \nfor ", place_name, " ("
+                     , lat, ", ", lon, ") "
+                     , days[1], " to ", days[2])
+
+chart_minT <- ggplot2::ggplot(dataToUse_weeklyStats, aes(date)) +
+  ggplot2::geom_col(aes(y = current_weekly_minT, fill = color_var_curr)) +
+  ggplot2::geom_line(aes(y = LTN_weekly_minT, color = color_var_LTN)) +
+  scale_x_date(date_labels = "%B %d"
+  ) +
+  labs(title = title_minT,
+       x = "Week start date",
+       y = "Weekly minimum temperature (deg C)")+
+  # format the legend items based on their color and names
+  scale_fill_identity(name = NULL,
+                      breaks = c(color_var_curr),
+                      labels = c("Current min temp"),
+                      guide = "legend") +
+  scale_color_identity(name = NULL,
+                       breaks = c(color_var_LTN),
+                       labels = c("LTN min temp"),
+                       guide = "legend") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(legend.position="right")
+
+# display & save chart
+chart_minT
+
+ggplot2::ggsave(filename = paste0("outputs/", place_name, "_",
+                                  "weekly-minT.png"),
+                width = 8, height = 6, units = "in",
+                plot = chart_minT)
+
+
+
+# P / PET ------------------------------------------------
+title_PPET <- paste0("Weekly P/PET: current and Long-Term Normal (LTN) \nfor ", place_name, " ("
+                     , lat, ", ", lon, ") "
+                     , days[1], " to ", days[2])
+
+chart_PPET <- ggplot2::ggplot(dataToUse_weeklyStats, aes(date)) +
+  ggplot2::geom_col(aes(y = current_weekly_PPET, fill = color_var_curr)) +
+  ggplot2::geom_line(aes(y = LTN_weekly_PPET, color = color_var_LTN)) +
+  scale_x_date(date_labels = "%B %d"
+  ) +
+  labs(title = title_PPET,
+       x = "Week start date",
+       y = "Weekly P/PET")+
+  # format the legend items based on their color and names
+  scale_fill_identity(name = NULL,
+                      breaks = c(color_var_curr),
+                      labels = c("Current P/PET"),
+                      guide = "legend") +
+  scale_color_identity(name = NULL,
+                       breaks = c(color_var_LTN),
+                       labels = c("LTN P/PET"),
+                       guide = "legend") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(legend.position="right")
+
+# display & save chart
+chart_PPET
+
+ggplot2::ggsave(filename = paste0("outputs/", place_name, "_",
+                                  "weekly-PPET.png"),
+                width = 8, height = 6, units = "in",
+                plot = chart_PPET)
+
+
