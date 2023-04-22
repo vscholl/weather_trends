@@ -5,3 +5,5 @@ awhere/*
 *.Rproj
 outputs/*
 .Rhistory
+chatGPT/*
+*.pdf
